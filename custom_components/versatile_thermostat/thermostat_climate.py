@@ -261,6 +261,24 @@ class ThermostatOverClimate(BaseThermostat[UnderlyingClimate]):
                 target_temp,
             )
 
+            ignore_neg_offset = offset_temp < 0 and target_temp < new_regulated_temp
+            ignore_pos_offset = offset_temp > 0 and target_temp > new_regulated_temp
+            should_heat = True
+            # if Vtherm target_temp >= room temperature, then we should heat
+            if self.current_temperature is not None and self._regulation_algo and self._regulation_algo.target_temp >= self.current_temperature:
+                should_heat = True
+            else:
+                should_heat = False
+
+            # if offset produce illogical target temp, we keep the previous one
+            if ignore_neg_offset and should_heat or ignore_pos_offset and not should_heat:
+                target_temp = new_regulated_temp
+                _LOGGER.debug(
+                    "%s - Ignore offset_temp to avoid an illogical target temp. New target is %.2f",
+                    self,
+                    target_temp,
+                )
+
             await under.set_temperature(
                 target_temp,
                 self._attr_max_temp,
