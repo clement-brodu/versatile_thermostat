@@ -216,6 +216,7 @@ class ThermostatOverClimate(BaseThermostat[UnderlyingClimate]):
                 ),
                 regulation_step,
             )
+
         else:
             new_regulated_temp = self.target_temperature
         dtemp = new_regulated_temp - self._regulated_target_temp
@@ -265,7 +266,7 @@ class ThermostatOverClimate(BaseThermostat[UnderlyingClimate]):
             ignore_pos_offset = offset_temp > 0 and target_temp > new_regulated_temp
             should_heat = True
             # if Vtherm target_temp >= room temperature, then we should heat
-            if self.current_temperature is not None and self._regulation_algo and self._regulation_algo.target_temp >= self.current_temperature:
+            if self.current_temperature is not None and self.target_temperature is not None and self.target_temperature >= self.current_temperature:
                 should_heat = True
             else:
                 should_heat = False
@@ -276,6 +277,41 @@ class ThermostatOverClimate(BaseThermostat[UnderlyingClimate]):
                 _LOGGER.debug(
                     "%s - Ignore offset_temp to avoid an illogical target temp. New target is %.2f",
                     self,
+                    target_temp,
+                )
+
+            hysteresis_underlying_offset = 1
+            # case
+            # - target_temp - device_temp < hysteresis_underlying_offset
+            # - 19.5 - 19.0 = 0.5 < 1 = True
+            # - 19.5 - 20.0 = -0.5 < 1 = True
+            # - 19.5 - 21 = -1.5 < 1 = True
+            # - 19.5 - 17 = 2.5 < 1 = False
+            should_increase = False
+            if device_temp is not None and device_temp > 0 and 0 <= (target_temp - device_temp) <= hysteresis_underlying_offset:
+                should_increase = True
+            _LOGGER.debug(
+                "%s - Therm: device_temp=%.2f target_temp=%.2f self.target_temperature=%.2f should_increase=%s should_heat=%s",
+                self,
+                device_temp,
+                target_temp,
+                self.target_temperature,
+                should_increase,
+                should_heat,
+            )
+            if (
+                should_heat
+                and device_temp is not None
+                and device_temp > 0
+                # and the target temp is close and lower to the device temp
+                and 0 <= (target_temp - device_temp) <= hysteresis_underlying_offset
+            ):
+                target_temp = round_to_nearest(target_temp + hysteresis_underlying_offset, regulation_step)
+                _LOGGER.debug(
+                    "%s - The device temp is %.2f and too close to the target temp. Add %.2f of offset. New target is %.2f",
+                    self,
+                    device_temp,
+                    hysteresis_underlying_offset,
                     target_temp,
                 )
 
